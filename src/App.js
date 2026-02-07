@@ -4,35 +4,40 @@ import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
 
 // ============================================
-// SYSTÈME DE PERSISTANCE CLOUD
+// SYSTÈME DE PERSISTANCE - UNIQUEMENT LOCALSTORAGE
 // ============================================
 const CloudStorage = {
-  async get(key) {
+  get(key) {
     try {
-      if (window.storage) {
-        const result = await window.storage.get(key, true);
-        console.log(`✅ Données chargées: ${key}`);
-        return result ? JSON.parse(result.value) : null;
-      }
       const data = localStorage.getItem(key);
-      return data ? JSON.parse(data) : null;
+      if (data) {
+        console.log(`✅ Données chargées: ${key}`);
+        return JSON.parse(data);
+      }
+      console.log(`ℹ️ Aucune donnée pour: ${key}`);
+      return null;
     } catch (error) {
-      console.error('Erreur chargement:', error);
+      console.error(`❌ Erreur chargement ${key}:`, error);
       return null;
     }
   },
   
-  async set(key, value) {
+  set(key, value) {
     try {
       const stringValue = JSON.stringify(value);
-      if (window.storage) {
-        await window.storage.set(key, stringValue, true);
-        console.log(`💾 Sauvegardé: ${key}`);
-      }
       localStorage.setItem(key, stringValue);
+      console.log(`💾 Sauvegardé: ${key}`, Array.isArray(value) ? `${value.length} items` : 'objet');
+      return true;
     } catch (error) {
-      console.error('Erreur sauvegarde:', error);
+      console.error(`❌ Erreur sauvegarde ${key}:`, error);
+      return false;
     }
+  },
+  
+  clear() {
+    const keys = ['activities', 'clients', 'notes', 'projects', 'tasks', 'reminders', 'sessions'];
+    keys.forEach(key => localStorage.removeItem(key));
+    console.log('🗑️ Tout le storage a été vidé');
   }
 };
 
@@ -41,9 +46,8 @@ export default function ProManager() {
   const [currentView, setCurrentView] = useState('calendar');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [viewMode, setViewMode] = useState('month'); // 'month' ou 'week'
+  const [viewMode, setViewMode] = useState('month');
 
-  
   // États des données
   const [activities, setActivities] = useState([]);
   const [clients, setClients] = useState([]);
@@ -73,28 +77,36 @@ export default function ProManager() {
   const [sessions, setSessions] = useState([]);
   const [todayWorkMinutes, setTodayWorkMinutes] = useState(0);
   
-  const audioRef = useRef(null);
-  
-  // ============================================
+  const audioRef = useRef(null);// ============================================
   // CHARGEMENT INITIAL
   // ============================================
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     loadAllData();
     checkReminders();
-    // const interval = setInterval(checkReminders, 60000);
-    const interval = setInterval(checkReminders, 1000);
-
+    const interval = setInterval(checkReminders, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
-  const savedDarkMode = localStorage.getItem('darkMode');
-  if (savedDarkMode !== null) {
-    setDarkMode(savedDarkMode === 'true');
-  } else {
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    setDarkMode(prefersDark);
-  }
+    const requestNotifPermission = () => {
+      if ("Notification" in window && Notification.permission === "default") {
+        Notification.requestPermission();
+      }
+      document.removeEventListener('click', requestNotifPermission);
+    };
+    
+    document.addEventListener('click', requestNotifPermission);
+    return () => document.removeEventListener('click', requestNotifPermission);
+  }, []);
+
+  useEffect(() => {
+    const savedDarkMode = localStorage.getItem('darkMode');
+    if (savedDarkMode !== null) {
+      setDarkMode(savedDarkMode === 'true');
+    } else {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      setDarkMode(prefersDark);
+    }
   }, []);
 
   useEffect(() => {
@@ -104,38 +116,80 @@ export default function ProManager() {
       : 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #60a5fa 100%)';
   }, [darkMode]);
   
-  async function loadAllData() {
-      const data = await Promise.all([
-        CloudStorage.get('activities'),
-        CloudStorage.get('clients'),
-        CloudStorage.get('notes'),
-        CloudStorage.get('projects'),
-        CloudStorage.get('tasks'),
-        CloudStorage.get('reminders'),
-        CloudStorage.get('sessions')
-      ]);
-      
-      if (data[0]) setActivities(data[0]);
-      if (data[1]) setClients(data[1]);
-      if (data[2]) setNotes(data[2]);
-      if (data[3]) setProjects(data[3]);
-      if (data[4]) setTasks(data[4]);
-      if (data[5]) setReminders(data[5]);
-      if (data[6]) setSessions(data[6]);
-      
-      calculateTodayWork(data[6] || []);
+  function loadAllData() {
+    const data = [
+      CloudStorage.get('activities'),
+      CloudStorage.get('clients'),
+      CloudStorage.get('notes'),
+      CloudStorage.get('projects'),
+      CloudStorage.get('tasks'),
+      CloudStorage.get('reminders'),
+      CloudStorage.get('sessions')
+    ];
+    
+    if (data[0]) setActivities(data[0]);
+    if (data[1]) setClients(data[1]);
+    if (data[2]) setNotes(data[2]);
+    if (data[3]) setProjects(data[3]);
+    if (data[4]) setTasks(data[4]);
+    if (data[5]) setReminders(data[5]);
+    if (data[6]) {
+      setSessions(data[6]);
+      calculateTodayWork(data[6]);
     }
+    
+    console.log('✅ Toutes les données chargées');
+  }
     
   // ============================================
   // SAUVEGARDE AUTOMATIQUE
   // ============================================
-  useEffect(() => { CloudStorage.set('activities', activities); }, [activities]);
-  useEffect(() => { CloudStorage.set('clients', clients); }, [clients]);
-  useEffect(() => { CloudStorage.set('notes', notes); }, [notes]);
-  useEffect(() => { CloudStorage.set('projects', projects); }, [projects]);
-  useEffect(() => { CloudStorage.set('tasks', tasks); }, [tasks]);
-  useEffect(() => { CloudStorage.set('reminders', reminders); }, [reminders]);
   useEffect(() => { 
+    if (activities.length > 0) {
+      console.log('💾 Sauvegarde activities:', activities.length);
+    }
+    CloudStorage.set('activities', activities); 
+  }, [activities]);
+  
+  useEffect(() => { 
+    if (clients.length > 0) {
+      console.log('💾 Sauvegarde clients:', clients.length);
+    }
+    CloudStorage.set('clients', clients); 
+  }, [clients]);
+  
+  useEffect(() => { 
+    if (notes.length > 0) {
+      console.log('💾 Sauvegarde notes:', notes.length);
+    }
+    CloudStorage.set('notes', notes); 
+  }, [notes]);
+  
+  useEffect(() => { 
+    if (projects.length > 0) {
+      console.log('💾 Sauvegarde projects:', projects.length);
+    }
+    CloudStorage.set('projects', projects); 
+  }, [projects]);
+  
+  useEffect(() => { 
+    if (tasks.length > 0) {
+      console.log('💾 Sauvegarde tasks:', tasks.length);
+    }
+    CloudStorage.set('tasks', tasks); 
+  }, [tasks]);
+  
+  useEffect(() => { 
+    if (reminders.length > 0) {
+      console.log('💾 Sauvegarde reminders:', reminders.length);
+    }
+    CloudStorage.set('reminders', reminders); 
+  }, [reminders]);
+  
+  useEffect(() => { 
+    if (sessions.length > 0) {
+      console.log('💾 Sauvegarde sessions:', sessions.length);
+    }
     CloudStorage.set('sessions', sessions);
     calculateTodayWork(sessions);
   }, [sessions]);
@@ -194,58 +248,40 @@ export default function ProManager() {
   // RAPPELS/ALARMES
   // ============================================
   function checkReminders() {
-  const now = new Date();
+    const now = new Date();
 
-  reminders.forEach(reminder => {
-    const reminderDate = new Date(reminder.datetime);
+    reminders.forEach(reminder => {
+      const reminderDate = new Date(reminder.datetime);
+      const diff = reminderDate - now;
 
-    if (!reminder.notified && reminderDate <= now) {
-      startAlarm();
-      showNotification(`🔔 RAPPEL: ${reminder.title}`, 'alarm');
+      if (!reminder.notified && diff <= 60000 && diff > 0) {
+        startAlarm();
+        showNotification(`🔔 RAPPEL: ${reminder.title}`, 'alarm');
 
-      setReminders(prev =>
-        prev.map(r =>
-          r.id === reminder.id ? { ...r, notified: true } : r
-        )
-      );
-    }
-  });
-}
+        setReminders(prev =>
+          prev.map(r =>
+            r.id === reminder.id ? { ...r, notified: true } : r
+          )
+        );
+      }
+    });
+  }
 
-  // function checkReminders() {
-  //   const now = new Date();
-  //   const nowStr = now.toISOString().slice(0, 16);
-    
-  //   reminders.forEach(reminder => {
-  //     if (!reminder.notified && reminder.datetime <= nowStr) {
-  //       playAlarm();
-  //       showNotification(`🔔 RAPPEL: ${reminder.title}`, 'alarm');
-  //       setReminders(prev => prev.map(r => 
-  //         r.id === reminder.id ? {...r, notified: true} : r
-  //       ));
-  //     }
-  //   });
-  // }
   function startAlarm() {
-  if (audioRef.current) {
-    audioRef.current.loop = true;   // son en boucle
-    audioRef.current.currentTime = 0;
-    audioRef.current.play().catch(() => {});
-    setAlarmPlaying(true);
-  }
-}
-function stopAlarm() {
-  if (audioRef.current) {
-    audioRef.current.pause();
-    audioRef.current.currentTime = 0;
-  }
-  setAlarmPlaying(false);
-}
-
-  function playAlarm() {
     if (audioRef.current) {
-      audioRef.current.play().catch(e => console.log('Audio play failed:', e));
+      audioRef.current.loop = true;
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().catch(() => {});
+      setAlarmPlaying(true);
     }
+  }
+  
+  function stopAlarm() {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    setAlarmPlaying(false);
   }
   
   function addReminder(reminder) {
@@ -261,9 +297,7 @@ function stopAlarm() {
   function deleteReminder(id) {
     setReminders(reminders.filter(r => r.id !== id));
     showNotification('Rappel supprimé');
-  }
-  
-  // ============================================
+  }// ============================================
   // CRUD FONCTIONS
   // ============================================
   function addActivity(activity) {
@@ -396,6 +430,57 @@ function stopAlarm() {
   }
   
   // ============================================
+  // EXPORT/IMPORT DONNÉES
+  // ============================================
+  function exportAllData() {
+    const allData = {
+      activities,
+      clients,
+      notes,
+      projects,
+      tasks,
+      reminders,
+      sessions,
+      exportDate: new Date().toISOString()
+    };
+    
+    const dataStr = JSON.stringify(allData, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `manager-pro-backup-${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    showNotification('💾 Données exportées');
+  }
+
+  function importData(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        
+        if (data.activities) setActivities(data.activities);
+        if (data.clients) setClients(data.clients);
+        if (data.notes) setNotes(data.notes);
+        if (data.projects) setProjects(data.projects);
+        if (data.tasks) setTasks(data.tasks);
+        if (data.reminders) setReminders(data.reminders);
+        if (data.sessions) setSessions(data.sessions);
+        
+        showNotification('✅ Données importées avec succès');
+      } catch (error) {
+        showNotification('❌ Erreur lors de l\'import', 'warning');
+      }
+    };
+    reader.readAsText(file);
+  }
+  
+  // ============================================
   // FONCTIONS CALENDRIER
   // ============================================
   function getDaysInMonth(date) {
@@ -416,31 +501,27 @@ function stopAlarm() {
     return days;
   }
   
-  // function getActivitiesForDate(date) {
-  //   if (!date) return [];
-  //   const dateStr = date.toISOString().split('T')[0];
-  //   return activities.filter(a => a.date === dateStr).sort((a, b) => a.startTime.localeCompare(b.startTime));
-  // }
- function getActivitiesForDate(date) {
-  if (!date) return [];
-  const dateStr = date.toISOString().split('T')[0];
-  let filtered = activities.filter(a => a.date === dateStr);
-  
-  // Recherche
-  if (searchQuery) {
-    filtered = filtered.filter(a => 
-      a.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (a.description && a.description.toLowerCase().includes(searchQuery.toLowerCase()))
-    );
+  function getActivitiesForDate(date) {
+    if (!date) return [];
+    const dateStr = date.toISOString().split('T')[0];
+    let filtered = activities.filter(a => a.date === dateStr);
+    
+    // Recherche
+    if (searchQuery) {
+      filtered = filtered.filter(a => 
+        a.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (a.description && a.description.toLowerCase().includes(searchQuery.toLowerCase()))
+      );
+    }
+    
+    // Filtre projet
+    if (filterProject) {
+      filtered = filtered.filter(a => a.project === filterProject);
+    }
+    
+    return filtered.sort((a, b) => a.startTime.localeCompare(b.startTime));
   }
   
-  // Filtre projet
-  if (filterProject) {
-    filtered = filtered.filter(a => a.project === filterProject);
-  }
-  
-  return filtered.sort((a, b) => a.startTime.localeCompare(b.startTime));
- }
   function calculateDuration(startTime, endTime) {
     const [startH, startM] = startTime.split(':').map(Number);
     const [endH, endM] = endTime.split(':').map(Number);
@@ -506,92 +587,50 @@ function stopAlarm() {
       avgPerDay: ((totalWork / 7) / 60).toFixed(1)
     };
   }
-  function getWeekDays(date) {
-  const curr = new Date(date);
-  const first = curr.getDate() - curr.getDay();
-  const days = [];
   
-  for (let i = 0; i < 7; i++) {
-    const day = new Date(curr.setDate(first + i));
-    days.push(new Date(day));
+  function getWeekDays(date) {
+    const curr = new Date(date);
+    const first = curr.getDate() - curr.getDay();
+    const days = [];
+    
+    for (let i = 0; i < 7; i++) {
+      const day = new Date(curr.setDate(first + i));
+      days.push(new Date(day));
+    }
+    return days;
   }
-  return days;
-}
+  
   // ============================================
   // NOTIFICATIONS
   // ============================================
   function showNotification(message, type = 'success') {
+    // Notification visuelle dans l'app
     const notif = document.createElement('div');
     notif.className = `notification ${type}`;
     notif.textContent = message;
     document.body.appendChild(notif);
-    
+
     setTimeout(() => {
       notif.classList.add('fade-out');
       setTimeout(() => notif.remove(), 300);
     }, 3000);
+
+    // Notification système PWA
+    if (type === 'alarm' && Notification.permission === 'granted') {
+      new Notification(message, {
+        icon: '/icon-192.png',
+        vibrate: [200, 100, 200, 100, 200]
+      });
+    }
   }
   
   const dayStats = getDayStats(selectedDate);
   const weekStats = getWeekStats();
-  const upcomingReminders = reminders.filter(r => !r.notified).slice(0, 5);
-  function exportAllData() {
-  const allData = {
-    activities,
-    clients,
-    notes,
-    projects,
-    tasks,
-    reminders,
-    sessions,
-    exportDate: new Date().toISOString()
-  };
-  
-  const dataStr = JSON.stringify(allData, null, 2);
-  const dataBlob = new Blob([dataStr], { type: 'application/json' });
-  const url = URL.createObjectURL(dataBlob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `manager-pro-backup-${new Date().toISOString().split('T')[0]}.json`;
-  link.click();
-  URL.revokeObjectURL(url);
-  showNotification('💾 Données exportées');
-}
-
-function importData(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    try {
-      const data = JSON.parse(e.target.result);
-      
-      if (data.activities) setActivities(data.activities);
-      if (data.clients) setClients(data.clients);
-      if (data.notes) setNotes(data.notes);
-      if (data.projects) setProjects(data.projects);
-      if (data.tasks) setTasks(data.tasks);
-      if (data.reminders) setReminders(data.reminders);
-      if (data.sessions) setSessions(data.sessions);
-      
-      showNotification('✅ Données importées avec succès');
-    } catch (error) {
-      showNotification('❌ Erreur lors de l\'import', 'warning');
-    }
-  };
-  reader.readAsText(file);
-}
-  return (
+  const upcomingReminders = reminders.filter(r => !r.notified).slice(0, 5);return (
     <div className={`app ${darkMode ? 'dark' : ''}`}>
-      <audio ref={audioRef} src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIGGS57OihUBELTKXh8LJnHgU2jdXvyoU0ByhxwuvfmUUND1Ot4+6qWBcLPJfZ77FpJAUtg9Pw2Ik2Bxhjtuzol1IQBSY7w+TfrEwUA0Sm3/G4bSQGLYLQ8tiJNgcYY7bs6JdSEAQlO8Pk36xMFANCpt/xuG0kBi2C0PLYiTYHGGO27OiXUhAEJTvD5N+sTBQDQqbf8bhtJAYtgtDy2Ik2BxhjtuzomFIQBCU7w+TfrEwUA0Km4PG4bCQGLYLQ8tiJNgcYY7bs6JdSEAQlO8Pk36xMFANCpt/xuG0kBi2C0PLYiTYHGGO27OiXUhAEJTvD5N+sTBQDQqbf8bhtJAYtgtDy2Ik2BxhjtuzoqFIQBCU7w+TfrEwUA0Km3/G4bSQGLYLQ8tiJNgcYY7bs6JdSEAQlO8Pk36xMFANCpt/xuG0kBi2C0PLYiTYHGGO27OiXUhAEJTvD5N+sTBQDQqbf8bhtJAYtgtDy2Ik2BxhjtuzoqFIQBCU7w+TfrEwUA0Km3/G4bSQGLYLQ8tiJNgcYY7bs6JdSEAQlO8Pk36xMFANCpt/xuG0kBi2C0PLYiTYHGGO27OiXUhAEJTvD5N+sTBQDQqbf8bhtJAYtgtDy2Ik2BxhjtuzoqFIQBCU7w+TfrEwUA0Km3/G4bSQGLYLQ8tiJNgcYY7bs6JdSEAQlO8Pk36xMFANCpt/xuG0kBi2C0PLYiTYHGGO27OiXUhAEJTvD5N+sTBQDQqbf8bhtJAYtgtDy2Ik2BxhjtuzoqFIQBCU7w+TfrEwUA0Km3/G4bSQGLYLQ8tiJNgcYY7bs6JdSEAQlO8Pk36xMFANCpt/xuG0kBi2C0PLYiTYHGGO27OiXUhAEJTvD5N+sTBQDQqbf8bhtJAYtgtDy2Ik2BxhjtuzoqFIQBCU7w+TfrEwUA0Km3/G4bSQGLYLQ8tiJNgcYY7bs6JdSEAQlO8Pk36xMFANCpt/xuG0kBi2C0PLYiTYHGGO27OiXUhAEJTvD5N+sTBQDQqbf8bhtJAYtgtDy2Ik2BxhjtuzoqFIQBCU7w+TfrEwUA0Km3/G4bSQGLYLQ8tiJNgcYY7bs6JdSEAQlO8Pk36xMFANCpt/xuG0kBi2C0PLYiTYHGGO27OiXUhAEJTvD5N+sTBQDQqbf8bhtJAYtgtDy2Ik2BxhjtuzoqFIQBCU7w+TfrEwUA0Km3/G4bSQGLYLQ8tiJNgcYY7bs6JdSEAQlO8Pk36xMFANCpt/xuG0kBi2C0PLYiTYHGGO27OiXUhAEJTvD5N+sTBQDQqbf8bhtJAYtgtDy2Ik2BxhjtuzoqFIQBCU7w+TfrEwUA0Km3/G4bSQGLYLQ8tiJNgcYY7bs6JdSEAQlO8Pk36xMFA" />
+      <audio ref={audioRef} src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIGGS57OihUBELTKXh8LJnHgU2jdXvyoU0ByhxwuvfmUUND1Ot4+6qWBcLPJfZ77FpJAUtg9Pw2Ik2Bxhjtuzol1IQBSY7w+TfrEwUA0Sm3/G4bSQGLYLQ8tiJNgcYY7bs6JdSEAQlO8Pk36xMFANCpt/xuG0kBi2C0PLYiTYHGGO27OiXUhAEJTvD5N+sTBQDQqbf8bhtJAYtgtDy2Ik2BxhjtuzomFIQBCU7w+TfrEwUA0Km4PG4bCQGLYLQ8tiJNgcYY7bs6JdSEAQlO8Pk36xMFANCpt/xuG0kBi2C0PLYiTYHGGO27OiXUhAEJTvD5N+sTBQDQqbf8bhtJAYtgtDy2Ik2BxhjtuzoqFIQBCU7w+TfrEwUA0Km3/G4bSQGLYLQ8tiJNgcYY7bs6JdSEAQlO8Pk36xMFANCpt/xuG0kBi2C0PLYiTYHGGO27OiXUhAEJTvD5N+sTBQDQqbf8bhtJAYtgtDy2Ik2BxhjtuzoqFIQBCU7w+TfrEwUA0Km3/G4bSQGLYLQ8tiJNgcYY7bs6JdSEAQlO8Pk36xMFANCpt/xuG0kBi2C0PLYiTYHGGO27OiXUhAEJTvD5N+sTBQDQqbf8bhtJAYtgtDy2Ik2BxhjtuzoqFIQBCU7w+TfrEwUA0Km3/G4bSQGLYLQ8tiJNgcYY7bs6JdSEAQlO8Pk36xMFANCpt/xuG0kBi2C0PLYiTYHGGO27OiXUhAEJTvD5N+sTBQDQqbf8bhtJAYtgtDy2Ik2BxhjtuzoqFIQBCU7w+TfrEwUA0Km3/G4bSQGLYLQ8tiJNgcYY7bs6JdSEAQlO8Pk36xMFANCpt/xuG0kBi2C0PLYiTYHGGO27OiXUhAEJTvD5N+sTBQDQqbf8bhtJAYtgtDy2Ik2BxhjtuzoqFIQBCU7w+TfrEwUA0Km3/G4bSQGLYLQ8tiJNgcYY7bs6JdSEAQlO8Pk36xMFANCpt/xuG0kBi2C0PLYiTYHGGO27OiXUhAEJTvD5N+sTBQDQqbf8bhtJAYtgtDy2Ik2BxhjtuzoqFIQBCU7w+TfrEwUA0Km3/G4bSQGLYLQ8tiJNgcYY7bs6JdSEAQlO8Pk36xMFA" />
       
       <style>{`
-      @media (max-width: 768px) {
-          .week-view {
-            grid-template-columns: 1fr !important;
-          }
-        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
         body {
@@ -1219,8 +1258,12 @@ function importData(event) {
           .calendar-day { min-height: 60px; }
           .timer-display { margin: 20px 0; }
           .btn { padding: 10px 16px; }
+          .week-view {
+            grid-template-columns: 1fr !important;
+          }
         }
-          /* MODE SOMBRE */
+        
+        /* MODE SOMBRE */
         .app.dark {
           color: #f1f5f9;
         }
@@ -1375,18 +1418,74 @@ function importData(event) {
             {darkMode ? <Sun size={18} /> : <Moon size={18} />}
             <span>{darkMode ? 'Mode Clair' : 'Mode Sombre'}</span>
           </button>
+          
           <button className="btn btn-secondary btn-small" onClick={exportAllData}>
-          <Download size={16} />
-          Exporter
+            <Download size={16} />
+            Exporter
           </button>
+          
           <label className="btn btn-secondary btn-small" style={{cursor: 'pointer', margin: 0}}>
             <Upload size={16} />
             Importer
-            <input type="file" accept=".json" o
-            nChange={importData} style={{display: 'none'}} />
+            <input type="file" accept=".json" onChange={importData} style={{display: 'none'}} />
           </label>
-          </div>  
-        </div>
+          
+          {/* BOUTON TEST SAUVEGARDE */}
+          <button 
+            className="btn btn-primary btn-small"
+            onClick={async () => {
+              const testProject = { id: Date.now(), name: 'Projet Test', description: 'Test de persistance' };
+              setProjects([testProject]);
+              
+              setTimeout(() => {
+                const saved = localStorage.getItem('projects');
+                if (saved) {
+                  console.log('✅ TEST RÉUSSI - Données sauvegardées:', JSON.parse(saved));
+                  showNotification('✅ La sauvegarde fonctionne !');
+                } else {
+                  console.error('❌ TEST ÉCHOUÉ - Rien n\'est sauvegardé');
+                  showNotification('❌ Erreur de sauvegarde', 'warning');
+                }
+              }, 1000);
+            }}
+          >
+            🧪 Tester
+          </button>
+          
+          {/* BOUTON DEBUG */}
+          <button 
+            className="btn btn-secondary btn-small"
+            onClick={() => {
+              console.log('📊 État actuel:');
+              console.log('Activities:', activities.length);
+              console.log('Projects:', projects.length);
+              console.log('Tasks:', tasks.length);
+              console.log('Clients:', clients.length);
+              console.log('Notes:', notes.length);
+              console.log('Reminders:', reminders.length);
+              console.log('Sessions:', sessions.length);
+              console.log('---');
+              console.log('📦 localStorage:');
+              console.log('projects:', localStorage.getItem('projects'));
+            }}
+          >
+            🔍 Debug
+          </button>
+          
+          {/* BOUTON RESET */}
+          <button 
+            className="btn btn-danger btn-small"
+            onClick={async () => {
+              if (window.confirm('⚠️ Effacer TOUTES les données ?')) {
+                CloudStorage.clear();
+                window.location.reload();
+              }
+            }}
+          >
+            🗑️ Reset
+          </button>
+        </div>  
+      </div>
       
       {/* NAVIGATION */}
       <div className="nav-tabs">
@@ -1446,9 +1545,7 @@ function importData(event) {
           <BarChart3 size={18} />
           <span>Stats</span>
         </button>
-      </div>
-      
-      {/* CONTENU */}
+      </div>{/* CONTENU */}
       <div className="content">
         <div style={{
               display: 'flex',
@@ -1516,6 +1613,7 @@ function importData(event) {
             </button>
           )}
         </div>
+        
         {/* VUE CALENDRIER */}
         {currentView === 'calendar' && (
           <div>
@@ -1592,147 +1690,112 @@ function importData(event) {
               </div>
             </div>
             
-            <div className="calendar-grid">
-              {/* {['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'].map(day => (
-                <div key={day} className="calendar-day-header">{day}</div>
-              ))}
-              
-              {getDaysInMonth(currentMonth).map((day, index) => {
-                const isToday = day && day.toDateString() === new Date().toDateString();
-                const isSelected = day && selectedDate && day.toDateString() === selectedDate.toDateString();
-                const dayActivities = day ? getActivitiesForDate(day) : [];
+            {viewMode === 'month' ? (
+              <div className="calendar-grid">
+                {['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'].map(day => (
+                  <div key={day} className="calendar-day-header">{day}</div>
+                ))}
                 
-                return (
-                  <div
-                    key={index}
-                    className={`calendar-day ${!day ? 'empty' : ''} ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''}`}
-                    onClick={() => day && setSelectedDate(day)}
-                  >
-                    {day && (
-                      <>
-                        <div className="day-number">{day.getDate()}</div>
-                        <div className="day-events">
-                          {dayActivities.slice(0, 2).map(activity => (
-                            <div key={activity.id} className="day-event-dot">
-                              {activity.startTime} {activity.title}
-                            </div>
-                          ))}
-                          {dayActivities.length > 2 && (
-                            <div className="day-event-dot">+{dayActivities.length - 2}</div>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                );
-              })} */}
-              {viewMode === 'month' ? (
-                <div className="calendar-grid">
-                  {['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'].map(day => (
-                    <div key={day} className="calendar-day-header">{day}</div>
-                  ))}
+                {getDaysInMonth(currentMonth).map((day, index) => {
+                  const isToday = day && day.toDateString() === new Date().toDateString();
+                  const isSelected = day && selectedDate && day.toDateString() === selectedDate.toDateString();
+                  const dayActivities = day ? getActivitiesForDate(day) : [];
                   
-                  {getDaysInMonth(currentMonth).map((day, index) => {
-                    const isToday = day && day.toDateString() === new Date().toDateString();
-                    const isSelected = day && selectedDate && day.toDateString() === selectedDate.toDateString();
-                    const dayActivities = day ? getActivitiesForDate(day) : [];
-                    
-                    return (
-                      <div
-                        key={index}
-                        className={`calendar-day ${!day ? 'empty' : ''} ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''}`}
-                        onClick={() => day && setSelectedDate(day)}
-                      >
-                        {day && (
-                          <>
-                            <div className="day-number">{day.getDate()}</div>
-                            <div className="day-events">
-                              {dayActivities.slice(0, 2).map(activity => (
-                                <div key={activity.id} className="day-event-dot">
-                                  {activity.startTime} {activity.title}
-                                </div>
-                              ))}
-                              {dayActivities.length > 2 && (
-                                <div className="day-event-dot">+{dayActivities.length - 2}</div>
-                              )}
+                  return (
+                    <div
+                      key={index}
+                      className={`calendar-day ${!day ? 'empty' : ''} ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''}`}
+                      onClick={() => day && setSelectedDate(day)}
+                    >
+                      {day && (
+                        <>
+                          <div className="day-number">{day.getDate()}</div>
+                          <div className="day-events">
+                            {dayActivities.slice(0, 2).map(activity => (
+                              <div key={activity.id} className="day-event-dot">
+                                {activity.startTime} {activity.title}
+                              </div>
+                            ))}
+                            {dayActivities.length > 2 && (
+                              <div className="day-event-dot">+{dayActivities.length - 2}</div>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(7, 1fr)',
+                gap: '19px',
+                marginBottom: '30px'
+              }}>
+                {getWeekDays(selectedDate).map((day, index) => {
+                  const isToday = day.toDateString() === new Date().toDateString();
+                  const dayActivities = getActivitiesForDate(day);
+                  
+                  return (
+                    <div key={index} style={{
+                      background: darkMode ? '#334155' : '#f8fafc',
+                      padding: '15px',
+                      borderRadius: '12px',
+                      minHeight: '300px',
+                      border: isToday ? '3px solid #10b981' : 'none'
+                    }}>
+                      <div style={{
+                        fontWeight: '800',
+                        fontSize: '1.1rem',
+                        marginBottom: '10px',
+                        color: darkMode ? '#60a5fa' : '#3b82f6'
+                      }}>
+                        {day.toLocaleDateString('fr-FR', { weekday: 'long' })}
+                      </div>
+                      <div style={{
+                        fontSize: '0.85rem',
+                        color: darkMode ? '#94a3b8' : '#64748b',
+                        marginBottom: '15px'
+                      }}>
+                        {day.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                      </div>
+                      <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
+                        {dayActivities.length === 0 ? (
+                          <div style={{
+                            color: '#94a3b8',
+                            fontSize: '0.85rem',
+                            textAlign: 'center',
+                            padding: '20px'
+                          }}>
+                            Aucune activité
+                          </div>
+                        ) : (
+                          dayActivities.map(activity => (
+                            <div key={activity.id} style={{
+                              padding: '10px',
+                              background: darkMode ? '#1e293b' : 'white',
+                              borderRadius: '8px',
+                              fontSize: '0.85rem',
+                              borderLeft: `4px solid ${
+                                activity.type === 'work' ? '#3b82f6' :
+                                activity.type === 'meeting' ? '#8b5cf6' :
+                                activity.type === 'break' ? '#f59e0b' : '#10b981'
+                              }`
+                            }}>
+                              <div style={{fontWeight: '700', marginBottom: '4px'}}>
+                                {activity.startTime} - {activity.endTime}
+                              </div>
+                              <div>{activity.title}</div>
                             </div>
-                          </>
+                          ))
                         )}
                       </div>
-                    );
-                  })}
-                </div>
-              ) : (
-               <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(7, 1fr)', // ← 7 jours horizontaux
-                  gap: '19px',
-                  marginBottom: '30px'
-                }}>
-                  {getWeekDays(selectedDate).map((day, index) => {
-                    const isToday = day.toDateString() === new Date().toDateString();
-                    const dayActivities = getActivitiesForDate(day);
-                    
-                    return (
-                      <div key={index} style={{
-                        background: darkMode ? '#334155' : '#f8fafc',
-                        padding: '15px',
-                        borderRadius: '12px',
-                        minHeight: '300px',
-                        border: isToday ? '3px solid #10b981' : 'none'
-                      }}>
-                        <div style={{
-                          fontWeight: '800',
-                          fontSize: '1.1rem',
-                          marginBottom: '10px',
-                          color: darkMode ? '#60a5fa' : '#3b82f6'
-                        }}>
-                          {day.toLocaleDateString('fr-FR', { weekday: 'long' })}
-                        </div>
-                        <div style={{
-                          fontSize: '0.85rem',
-                          color: darkMode ? '#94a3b8' : '#64748b',
-                          marginBottom: '15px'
-                        }}>
-                          {day.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
-                        </div>
-                        <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
-                          {dayActivities.length === 0 ? (
-                            <div style={{
-                              color: '#94a3b8',
-                              fontSize: '0.85rem',
-                              textAlign: 'center',
-                              padding: '20px'
-                            }}>
-                              Aucune activité
-                            </div>
-                          ) : (
-                            dayActivities.map(activity => (
-                              <div key={activity.id} style={{
-                                padding: '10px',
-                                background: darkMode ? '#1e293b' : 'white',
-                                borderRadius: '8px',
-                                fontSize: '0.85rem',
-                                borderLeft: `4px solid ${
-                                  activity.type === 'work' ? '#3b82f6' :
-                                  activity.type === 'meeting' ? '#8b5cf6' :
-                                  activity.type === 'break' ? '#f59e0b' : '#10b981'
-                                }`
-                              }}>
-                                <div style={{fontWeight: '700', marginBottom: '4px'}}>
-                                  {activity.startTime} - {activity.endTime}
-                                </div>
-                                <div>{activity.title}</div>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             
             {selectedDate && (
               <div>
@@ -1888,9 +1951,7 @@ function importData(event) {
               </div>
             )}
           </>
-        )}
-        
-        {/* VUE CHRONOMÈTRE */}
+        )}{/* VUE CHRONOMÈTRE */}
         {currentView === 'chrono' && (
           <div>
             <h2 style={{marginBottom: 25, fontSize: 'clamp(1.5rem, 4vw, 2rem)', fontWeight: 800}}>
@@ -2019,7 +2080,7 @@ function importData(event) {
                     .map(session => (
                       <div key={session.id} style={{
                         padding: 15,
-                        background: '#f8fafc',
+                        background: darkMode ? '#334155' : '#f8fafc',
                         borderRadius: 12,
                         display: 'flex',
                         justifyContent: 'space-between',
@@ -2050,7 +2111,7 @@ function importData(event) {
         {currentView === 'projects' && (
           <>
             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25, flexWrap: 'wrap', gap: 15}}>
-              <h2 style={{fontSize: 'clamp(1.5rem, 4vw, 2rem)', fontWeight: 800}}>Projets</h2>
+              <h2 style={{fontSize: 'clamp(1.5rem, 4vw, 2rem)', fontWeight: 800}}>📁 Projets</h2>
               <button className="btn btn-primary" onClick={() => setShowProjectModal(true)}>
                 <Plus size={18} />
                 Nouveau projet
@@ -2067,11 +2128,11 @@ function importData(event) {
                 {projects.map(project => (
                   <div key={project.id} style={{
                     padding: 20,
-                    background: 'white',
-                    border: '3px solid #e2e8f0',
+                    background: darkMode ? '#334155' : 'white',
+                    border: `3px solid ${darkMode ? '#475569' : '#e2e8f0'}`,
                     borderRadius: 16
                   }}>
-                    <div style={{fontSize: '1.2rem', fontWeight: 800, color: '#1e293b', marginBottom: 10}}>
+                    <div style={{fontSize: '1.2rem', fontWeight: 800, color: darkMode ? '#f1f5f9' : '#1e293b', marginBottom: 10}}>
                       {project.name}
                     </div>
                     {project.description && (
@@ -2097,7 +2158,7 @@ function importData(event) {
         {currentView === 'clients' && (
           <>
             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25, flexWrap: 'wrap', gap: 15}}>
-              <h2 style={{fontSize: 'clamp(1.5rem, 4vw, 2rem)', fontWeight: 800}}>Clients</h2>
+              <h2 style={{fontSize: 'clamp(1.5rem, 4vw, 2rem)', fontWeight: 800}}>👥 Clients</h2>
               <button className="btn btn-primary" onClick={() => setShowClientModal(true)}>
                 <Plus size={18} />
                 Nouveau client
@@ -2114,11 +2175,11 @@ function importData(event) {
                 {clients.map(client => (
                   <div key={client.id} style={{
                     padding: 20,
-                    background: 'white',
-                    border: '3px solid #e2e8f0',
+                    background: darkMode ? '#334155' : 'white',
+                    border: `3px solid ${darkMode ? '#475569' : '#e2e8f0'}`,
                     borderRadius: 16
                   }}>
-                    <div style={{fontSize: '1.2rem', fontWeight: 800, color: '#1e293b', marginBottom: 10}}>
+                    <div style={{fontSize: '1.2rem', fontWeight: 800, color: darkMode ? '#f1f5f9' : '#1e293b', marginBottom: 10}}>
                       {client.name}
                     </div>
                     <div style={{fontSize: '0.9rem', color: '#64748b', marginBottom: 5}}>
@@ -2144,21 +2205,19 @@ function importData(event) {
               </div>
             )}
           </>
-        )}
-        
-        {/* VUE RAPPELS */}
+        )}{/* VUE RAPPELS */}
         {currentView === 'reminders' && (
           <>
-          {alarmPlaying && (
-              <div style={{marginTop: 20, textAlign: 'center'}}>
+            {alarmPlaying && (
+              <div style={{marginBottom: 20, textAlign: 'center'}}>
                 <button className="btn btn-danger" onClick={stopAlarm}>
-                  🔕 Arrêter l’alarme
+                  🔕 Arrêter l'alarme
                 </button>
               </div>
             )}
 
             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25, flexWrap: 'wrap', gap: 15}}>
-              <h2 style={{fontSize: 'clamp(1.5rem, 4vw, 2rem)', fontWeight: 800}}>Rappels & Alarmes</h2>
+              <h2 style={{fontSize: 'clamp(1.5rem, 4vw, 2rem)', fontWeight: 800}}>🔔 Rappels & Alarmes</h2>
               <button className="btn btn-primary" onClick={() => setShowReminderModal(true)}>
                 <Plus size={18} />
                 Nouveau rappel
@@ -2204,7 +2263,7 @@ function importData(event) {
         {currentView === 'notes' && (
           <>
             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25, flexWrap: 'wrap', gap: 15}}>
-              <h2 style={{fontSize: 'clamp(1.5rem, 4vw, 2rem)', fontWeight: 800}}>Notes</h2>
+              <h2 style={{fontSize: 'clamp(1.5rem, 4vw, 2rem)', fontWeight: 800}}>📝 Notes</h2>
               <button className="btn btn-primary" onClick={() => setShowNoteModal(true)}>
                 <Plus size={18} />
                 Nouvelle note
@@ -2221,17 +2280,17 @@ function importData(event) {
                 {notes.map(note => (
                   <div key={note.id} style={{
                     padding: 20,
-                    background: '#fffbeb',
+                    background: darkMode ? '#334155' : '#fffbeb',
                     borderRadius: 16,
-                    border: '3px solid #fbbf24'
+                    border: `3px solid ${darkMode ? '#475569' : '#fbbf24'}`
                   }}>
-                    <div style={{fontWeight: 800, color: '#78350f', marginBottom: 10, fontSize: '1.2rem'}}>
+                    <div style={{fontWeight: 800, color: darkMode ? '#fbbf24' : '#78350f', marginBottom: 10, fontSize: '1.2rem'}}>
                       {note.title}
                     </div>
-                    <div style={{color: '#92400e', lineHeight: 1.6, marginBottom: 12}}>
+                    <div style={{color: darkMode ? '#fde68a' : '#92400e', lineHeight: 1.6, marginBottom: 12}}>
                       {note.content}
                     </div>
-                    <div style={{fontSize: '0.8rem', color: '#a16207', marginBottom: 12}}>
+                    <div style={{fontSize: '0.8rem', color: darkMode ? '#fcd34d' : '#a16207', marginBottom: 12}}>
                       {new Date(note.createdAt).toLocaleDateString('fr-FR')}
                     </div>
                     <button 
@@ -2300,7 +2359,7 @@ function importData(event) {
                         {item.hours}h ({percentage}%)
                       </span>
                     </div>
-                    <div style={{height: '15px', background: '#e2e8f0', borderRadius: '10px', overflow: 'hidden'}}>
+                    <div style={{height: '15px', background: darkMode ? '#475569' : '#e2e8f0', borderRadius: '10px', overflow: 'hidden'}}>
                       <div style={{
                         height: '100%',
                         background: item.color,
@@ -2318,7 +2377,7 @@ function importData(event) {
               <h3 style={{marginBottom: 20, color: '#3b82f6', fontSize: '1.5rem'}}>
                 ✅ Tâches Complétées
               </h3>
-              <div style={{background: '#f8fafc', padding: '25px', borderRadius: '16px'}}>
+              <div style={{background: darkMode ? '#334155' : '#f8fafc', padding: '25px', borderRadius: '16px'}}>
                 <div style={{fontSize: '3rem', fontWeight: '900', color: '#10b981', marginBottom: '10px'}}>
                   {tasks.filter(t => t.completed).length}
                 </div>
@@ -2330,6 +2389,10 @@ function importData(event) {
           </>
         )}
       </div>
+      
+      {/* ============================================ */}
+      {/* MODALS */}
+      {/* ============================================ */}
       
       {/* MODAL ACTIVITÉ */}
       {showActivityModal && (
