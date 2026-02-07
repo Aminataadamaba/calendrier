@@ -60,7 +60,9 @@ export default function ProManager() {
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-const [filterProject, setFilterProject] = useState('');
+  const [filterProject, setFilterProject] = useState('');
+  const [alarmPlaying, setAlarmPlaying] = useState(false);
+
   // Chronomètre
   const [timerSeconds, setTimerSeconds] = useState(0);
   const [timerRunning, setTimerRunning] = useState(false);
@@ -80,7 +82,9 @@ const [filterProject, setFilterProject] = useState('');
   useEffect(() => {
     loadAllData();
     checkReminders();
-    const interval = setInterval(checkReminders, 60000);
+    // const interval = setInterval(checkReminders, 60000);
+    const interval = setInterval(checkReminders, 1000);
+
     return () => clearInterval(interval);
   }, []);
   useEffect(() => {
@@ -190,20 +194,54 @@ const [filterProject, setFilterProject] = useState('');
   // RAPPELS/ALARMES
   // ============================================
   function checkReminders() {
-    const now = new Date();
-    const nowStr = now.toISOString().slice(0, 16);
+  const now = new Date();
+
+  reminders.forEach(reminder => {
+    const reminderDate = new Date(reminder.datetime);
+
+    if (!reminder.notified && reminderDate <= now) {
+      startAlarm();
+      showNotification(`🔔 RAPPEL: ${reminder.title}`, 'alarm');
+
+      setReminders(prev =>
+        prev.map(r =>
+          r.id === reminder.id ? { ...r, notified: true } : r
+        )
+      );
+    }
+  });
+}
+
+  // function checkReminders() {
+  //   const now = new Date();
+  //   const nowStr = now.toISOString().slice(0, 16);
     
-    reminders.forEach(reminder => {
-      if (!reminder.notified && reminder.datetime <= nowStr) {
-        playAlarm();
-        showNotification(`🔔 RAPPEL: ${reminder.title}`, 'alarm');
-        setReminders(prev => prev.map(r => 
-          r.id === reminder.id ? {...r, notified: true} : r
-        ));
-      }
-    });
+  //   reminders.forEach(reminder => {
+  //     if (!reminder.notified && reminder.datetime <= nowStr) {
+  //       playAlarm();
+  //       showNotification(`🔔 RAPPEL: ${reminder.title}`, 'alarm');
+  //       setReminders(prev => prev.map(r => 
+  //         r.id === reminder.id ? {...r, notified: true} : r
+  //       ));
+  //     }
+  //   });
+  // }
+  function startAlarm() {
+  if (audioRef.current) {
+    audioRef.current.loop = true;   // son en boucle
+    audioRef.current.currentTime = 0;
+    audioRef.current.play().catch(() => {});
+    setAlarmPlaying(true);
   }
-  
+}
+function stopAlarm() {
+  if (audioRef.current) {
+    audioRef.current.pause();
+    audioRef.current.currentTime = 0;
+  }
+  setAlarmPlaying(false);
+}
+
   function playAlarm() {
     if (audioRef.current) {
       audioRef.current.play().catch(e => console.log('Audio play failed:', e));
@@ -2111,6 +2149,14 @@ function importData(event) {
         {/* VUE RAPPELS */}
         {currentView === 'reminders' && (
           <>
+          {alarmPlaying && (
+              <div style={{marginTop: 20, textAlign: 'center'}}>
+                <button className="btn btn-danger" onClick={stopAlarm}>
+                  🔕 Arrêter l’alarme
+                </button>
+              </div>
+            )}
+
             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25, flexWrap: 'wrap', gap: 15}}>
               <h2 style={{fontSize: 'clamp(1.5rem, 4vw, 2rem)', fontWeight: 800}}>Rappels & Alarmes</h2>
               <button className="btn btn-primary" onClick={() => setShowReminderModal(true)}>
