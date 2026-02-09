@@ -1,6 +1,6 @@
 /* eslint-disable no-restricted-globals */
 
-const CACHE_NAME = "calendrier-cache-v1";
+const CACHE_NAME = "manager-pro-v1";
 const urlsToCache = [
   "/",
   "/index.html",
@@ -9,22 +9,30 @@ const urlsToCache = [
   "/logo512.png"
 ];
 
-// INSTALLATION
+// INSTALL
 self.addEventListener("install", (event) => {
   self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(urlsToCache);
-    })
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(urlsToCache))
   );
 });
 
-// ACTIVATION
+// ACTIVATE
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(
+      keys
+        .filter((key) => key !== CACHE_NAME)
+        .map((key) => caches.delete(key))
+
+      )
+    )
+  );
+  self.clients.claim();
 });
 
-// FETCH (mode hors ligne)
+// FETCH
 self.addEventListener("fetch", (event) => {
   event.respondWith(
     caches.match(event.request).then((response) => {

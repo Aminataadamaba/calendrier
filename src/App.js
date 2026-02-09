@@ -1391,6 +1391,38 @@ export default function ProManager() {
         .dark .task-title {
           color: #f1f5f9;
         }
+          /* ===== RESPONSIVE CALENDRIER MOBILE ===== */
+@media (max-width: 640px) {
+
+  .calendar-grid {
+    grid-template-columns: repeat(7, minmax(40px, 1fr));
+    gap: 4px;
+  }
+
+  .calendar-day {
+    min-height: 55px;
+    padding: 4px;
+    border-radius: 8px;
+  }
+
+  .day-number {
+    font-size: 0.8rem;
+  }
+
+  .day-events {
+    display: none; /* cache les textes pour éviter le débordement */
+  }
+
+  /* Vue semaine → scroll horizontal */
+  .week-view-container {
+    overflow-x: auto;
+  }
+
+  .week-view {
+    min-width: 700px; /* force un scroll propre */
+  }
+}
+
       `}</style>
       
       {/* HEADER */}
@@ -1431,7 +1463,7 @@ export default function ProManager() {
           </label>
           
           {/* BOUTON TEST SAUVEGARDE */}
-          <button 
+          {/* <button 
             className="btn btn-primary btn-small"
             onClick={async () => {
               const testProject = { id: Date.now(), name: 'Projet Test', description: 'Test de persistance' };
@@ -1451,9 +1483,9 @@ export default function ProManager() {
           >
             🧪 Tester
           </button>
-          
+           */}
           {/* BOUTON DEBUG */}
-          <button 
+          {/* <button 
             className="btn btn-secondary btn-small"
             onClick={() => {
               console.log('📊 État actuel:');
@@ -1470,7 +1502,7 @@ export default function ProManager() {
             }}
           >
             🔍 Debug
-          </button>
+          </button> */}
           
           {/* BOUTON RESET */}
           <button 
@@ -1727,12 +1759,15 @@ export default function ProManager() {
                 })}
               </div>
             ) : (
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(7, 1fr)',
-                gap: '19px',
-                marginBottom: '30px'
-              }}>
+              // <div style={{
+              //   display: 'grid',
+              //   gridTemplateColumns: 'repeat(7, 1fr)',
+              //   gap: '19px',
+              //   marginBottom: '30px'
+              // }}>
+                <div className="week-view-container">
+                <div className="week-view">
+
                 {getWeekDays(selectedDate).map((day, index) => {
                   const isToday = day.toDateString() === new Date().toDateString();
                   const dayActivities = getActivitiesForDate(day);
@@ -1794,6 +1829,7 @@ export default function ProManager() {
                     </div>
                   );
                 })}
+              </div>
               </div>
             )}
             
@@ -1951,7 +1987,8 @@ export default function ProManager() {
               </div>
             )}
           </>
-        )}{/* VUE CHRONOMÈTRE */}
+        )}
+        {/* VUE CHRONOMÈTRE */}
         {currentView === 'chrono' && (
           <div>
             <h2 style={{marginBottom: 25, fontSize: 'clamp(1.5rem, 4vw, 2rem)', fontWeight: 800}}>
