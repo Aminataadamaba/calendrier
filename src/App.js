@@ -1462,48 +1462,7 @@ export default function ProManager() {
             <input type="file" accept=".json" onChange={importData} style={{display: 'none'}} />
           </label>
           
-          {/* BOUTON TEST SAUVEGARDE */}
-          {/* <button 
-            className="btn btn-primary btn-small"
-            onClick={async () => {
-              const testProject = { id: Date.now(), name: 'Projet Test', description: 'Test de persistance' };
-              setProjects([testProject]);
-              
-              setTimeout(() => {
-                const saved = localStorage.getItem('projects');
-                if (saved) {
-                  console.log('✅ TEST RÉUSSI - Données sauvegardées:', JSON.parse(saved));
-                  showNotification('✅ La sauvegarde fonctionne !');
-                } else {
-                  console.error('❌ TEST ÉCHOUÉ - Rien n\'est sauvegardé');
-                  showNotification('❌ Erreur de sauvegarde', 'warning');
-                }
-              }, 1000);
-            }}
-          >
-            🧪 Tester
-          </button>
-           */}
-          {/* BOUTON DEBUG */}
-          {/* <button 
-            className="btn btn-secondary btn-small"
-            onClick={() => {
-              console.log('📊 État actuel:');
-              console.log('Activities:', activities.length);
-              console.log('Projects:', projects.length);
-              console.log('Tasks:', tasks.length);
-              console.log('Clients:', clients.length);
-              console.log('Notes:', notes.length);
-              console.log('Reminders:', reminders.length);
-              console.log('Sessions:', sessions.length);
-              console.log('---');
-              console.log('📦 localStorage:');
-              console.log('projects:', localStorage.getItem('projects'));
-            }}
-          >
-            🔍 Debug
-          </button> */}
-          
+         
           {/* BOUTON RESET */}
           <button 
             className="btn btn-danger btn-small"
@@ -1742,7 +1701,7 @@ export default function ProManager() {
                       {day && (
                         <>
                           <div className="day-number">{day.getDate()}</div>
-                          <div className="day-events">
+                          {/* <div className="day-events">
                             {dayActivities.slice(0, 2).map(activity => (
                               <div key={activity.id} className="day-event-dot">
                                 {activity.startTime} {activity.title}
@@ -1751,7 +1710,35 @@ export default function ProManager() {
                             {dayActivities.length > 2 && (
                               <div className="day-event-dot">+{dayActivities.length - 2}</div>
                             )}
-                          </div>
+                          </div> */}
+                          <div style={{ display: "flex", gap: 3, flexWrap: "wrap", marginTop: 4 }}>
+  {dayActivities.slice(0, 4).map(activity => (
+    <span
+      key={activity.id}
+      style={{
+        width: 6,
+        height: 6,
+        borderRadius: "50%",
+        background:
+          activity.type === "work"
+            ? "#3b82f6"
+            : activity.type === "meeting"
+            ? "#8b5cf6"
+            : activity.type === "break"
+            ? "#f59e0b"
+            : "#10b981",
+        display: "inline-block",
+      }}
+    />
+  ))}
+
+  {dayActivities.length > 4 && (
+    <span style={{ fontSize: 8, fontWeight: "bold" }}>
+      +{dayActivities.length - 4}
+    </span>
+  )}
+</div>
+
                         </>
                       )}
                     </div>
