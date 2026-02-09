@@ -5,8 +5,8 @@ const urlsToCache = [
   "/",
   "/index.html",
   "/manifest.json",
-  "/logo192.png",
-  "/logo512.png"
+  "/logo192.svg",
+  "/logo512.svg"
 ];
 
 // INSTALL
