@@ -1427,7 +1427,7 @@ export default function ProManager() {
       
       {/* HEADER */}
       <div className="header">
-        <h1>📊 Manager Pro</h1>
+        <h1>📊 Mon Planning</h1>
         <div style={{fontSize: '0.9rem', color: '#64748b'}}>
           💾 Gestion de tout mes activites
         </div>
