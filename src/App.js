@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Calendar, Clock, Users, FileText, BarChart3, Plus, X, Trash2, Download, ChevronLeft, ChevronRight, Play, Pause, RotateCcw, Coffee, Briefcase, Bell, TrendingUp, Check, Moon, Sun, Search, Upload, Filter} from 'lucide-react';
+import { Calendar, Clock, Users, FileText, BarChart3, Plus, X, Trash2, Download, ChevronLeft, ChevronRight, Play, Pause, RotateCcw, Coffee, Briefcase, Bell, TrendingUp, Check, Moon, Sun, Search, Upload} from 'lucide-react';
 import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
 
